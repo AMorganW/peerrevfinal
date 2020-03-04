@@ -1,0 +1,171 @@
+---
+title: "Exploring the BRFSS data"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+```
+
+### Load data
+
+Make sure your data and R Markdown files are in the same directory. When loaded
+your data file will be called `brfss2013`. Delete this note when before you submit 
+your work. 
+
+```{r load-data}
+load("brfss2013.RData")
+load("~/Desktop/GitHub/Peer-Rev-Assignment/brfss2013.Rdata")
+```
+
+
+
+* * *
+
+## Part 1: Data
+
+#Subset data into mental health data and sleep data for analysis. 
+```{r}
+brfss_mh_sl<-subset(brfss2013,select = c(X_state,employ1,hlthpln1,genhlth,menthlth,sleptim1))
+```
+
+
+* * *
+
+## Part 2: Research questions
+
+**Research quesion 1:**
+#Which states generally show the highest number of days of poor mental health and the lowest average sleep times? 
+#___________________________________________________________________________#
+
+#1: Convert mental health scores from integers to factors for atomic manipulation.
+```{r}
+as.factor(brfss_mh_sl$menthlth)
+```
+
+#2: Create a new table with average mental health scores (number of days reported with poor mental health) and standard deviations: 
+
+```{r}
+state_avgs<-brfss_mh_sl%>%
+  group_by(X_state)%>%
+  summarise(mean_mh=mean(menthlth,na.rm = TRUE),sd_mh=sd(menthlth,na.rm=TRUE),mean_sleep=mean(sleptim1,na.rm=TRUE),sd_sleep=sd(sleptim1,na.rm=TRUE))
+```
+
+  
+#Remove all non-state values 
+```{r}
+state_avgs<-state_avgs%>%
+   filter(X_state!="Guam",X_state!="Puerto Rico",X_state!=0,X_state!=80)
+ View(state_avgs)
+ 
+ #Load tidyverse and urbnmapr for geocoding 
+ 
+ library(tidyverse)
+ library(urbnmapr)
+
+
+```
+
+
+
+#3: Use "states" and "statedata" to merge brfss data with map shapefile and coordinates 
+```{r}
+View(states)
+View(statedata)
+```
+
+
+#Mutate state average data to include state FIPS codes from "states"
+```{r}
+state_avgs<-state_avgs%>%
+  mutate(state_fips=statedata$state_fips)
+```
+  
+#Create a map shapefile for visualization 
+```{r}
+mh_states_map<-left_join(state_avgs,states,by="state_fips")
+
+##MENTAL HEALTH
+mh_states_map %>%
+  ggplot(aes(long, lat, group = group, fill = mean_mh)) +
+  geom_polygon(color = NA) +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  labs(fill = "mean_mh")+ggtitle("Days of Poor Mental Health Reported by State")
+
+```
+```{r}
+##SLEEP TIMES
+mh_states_map %>%
+  ggplot(aes(long, lat, group = group, fill = mean_sleep)) +
+  geom_polygon(color = NA) +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  labs(fill = "mean_sleep")+ggtitle("Average Reported Hours of Sleep by State")
+```
+
+##ANALYSIS: Based on the visualization, states showing higher numbers of days experiencing poor mental health are also states whose average sleep times are generally lower. 
+
+**Research quesion 2:**
+#Is there a statistical relationship between average hours of sleep and average days of poor mental health as indicated by the graph? 
+#_________________________________________________________________________________________#
+
+#Create a plot to visualize relationship, Sleep as the assumed independent variable. 
+
+```{r}
+scatter.smooth(x=state_avgs$mean_sleep,y=state_avgs$mean_mh,xlab = "Average Hours of Sleep Per State",ylab = "Number of Days of Low Mental Health")
+```
+
+#There appears to be a relationship showing fewer poor mental health days correlating with higher average hours of sleep. 
+
+#STATISTICAL TEST: 
+```{r}
+cor(state_avgs$mean_sleep,state_avgs$mean_mh)
+```
+
+##This indicates a moderate negative relationsip between sleep and mental health days, suggesting that state populations who sleep more have better mental health. 
+
+**Research quesion 3:**
+
+```{r}
+#Identify three lowest scoring states: 
+
+#Top three pulled from table: Alabama, West Virginia, Kentucky. 
+
+depression<-subset(brfss2013,select = c(X_state,addepev2))
+
+table(depression$addepev2)
+```
+```{r}
+95778/393707
+
+```
+
+#24% of total respondents had been told they had depression. 
+
+#Pull only Alabama, West Virginia, and Kentucky 
+
+```{r}
+depression_alkewv<-subset(filter(depression,X_state=="West Virginia"|X_state=="Kentucky"|X_state=="Alabama"))
+
+table(depression_alkewv$addepev2)
+
+
+```
+```{r}
+5248/17932
+```
+
+```{r}
+#29% of respondents in lower scoring states reported being told that they have depression. This is 4% higher than the percentage reported overall. 
+```
+
+
+
